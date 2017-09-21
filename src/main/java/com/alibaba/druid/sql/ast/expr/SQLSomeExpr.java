@@ -24,7 +24,7 @@ import com.alibaba.druid.sql.visitor.SQLASTVisitor;
 
 import java.util.List;
 
-public class SQLSomeExpr extends SQLExprImpl {
+public final class SQLSomeExpr extends SQLExprImpl {
 
     public SQLSelect subQuery;
 
@@ -33,8 +33,15 @@ public class SQLSomeExpr extends SQLExprImpl {
     }
 
     public SQLSomeExpr(SQLSelect select){
+        this.setSubQuery(select);
+    }
 
-        this.subQuery = select;
+    public SQLSomeExpr clone() {
+        SQLSomeExpr x = new SQLSomeExpr();
+        if (subQuery != null) {
+            x.setSubQuery(subQuery.clone());
+        }
+        return x;
     }
 
     public SQLSelect getSubQuery() {
@@ -42,6 +49,9 @@ public class SQLSomeExpr extends SQLExprImpl {
     }
 
     public void setSubQuery(SQLSelect subQuery) {
+        if (subQuery != null) {
+            subQuery.setParent(this);
+        }
         this.subQuery = subQuery;
     }
 

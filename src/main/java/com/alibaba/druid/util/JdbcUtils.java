@@ -462,6 +462,8 @@ public final class JdbcUtils implements JdbcConstants {
             return JdbcConstants.PHOENIX_DRIVER;
         } else if (rawUrl.startsWith("jdbc:kylin:")) {
             return JdbcConstants.KYLIN_DRIVER;
+        } else if (rawUrl.startsWith("jdbc:elastic:")) {
+            return JdbcConstants.ELASTIC_SEARCH_DRIVER;
         } else {
             throw new SQLException("unkow jdbc driver : " + rawUrl);
         }
@@ -547,6 +549,8 @@ public final class JdbcUtils implements JdbcConstants {
             return HIVE;
         } else if (rawUrl.startsWith("jdbc:phoenix:")) {
             return PHOENIX;
+        } else if (rawUrl.startsWith("jdbc:elastic:")) {
+            return ELASTIC_SEARCH;
         } else {
             return null;
         }
@@ -793,6 +797,9 @@ public final class JdbcUtils implements JdbcConstants {
             return OracleUtils.showTables(conn);
         }
 
+        if (JdbcConstants.POSTGRESQL.equals(dbType)) {
+            return PGUtils.showTables(conn);
+        }
         throw new SQLException("show tables dbType not support for " + dbType);
     }
 
@@ -810,5 +817,11 @@ public final class JdbcUtils implements JdbcConstants {
         }
 
         throw new SQLException("getCreateTableScript dbType not support for " + dbType);
+    }
+
+    public static boolean isMySqlDriver(String driverClassName) {
+        return driverClassName.equals(JdbcConstants.MYSQL_DRIVER) //
+                || driverClassName.equals(JdbcConstants.MYSQL_DRIVER_6)
+                || driverClassName.equals(JdbcConstants.MYSQL_DRIVER_REPLICATE);
     }
 }

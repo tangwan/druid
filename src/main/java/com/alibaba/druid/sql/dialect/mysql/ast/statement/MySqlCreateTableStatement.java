@@ -28,6 +28,7 @@ import com.alibaba.druid.sql.ast.SQLName;
 import com.alibaba.druid.sql.ast.SQLObject;
 import com.alibaba.druid.sql.ast.SQLPartitionBy;
 import com.alibaba.druid.sql.ast.statement.*;
+import com.alibaba.druid.sql.dialect.mysql.ast.MySqlKey;
 import com.alibaba.druid.sql.dialect.mysql.ast.MySqlObjectImpl;
 import com.alibaba.druid.sql.dialect.mysql.ast.MySqlPrimaryKey;
 import com.alibaba.druid.sql.dialect.mysql.ast.MySqlUnique;
@@ -47,7 +48,7 @@ public class MySqlCreateTableStatement extends SQLCreateTableStatement implement
 
     private List<SQLCommentHint>   optionHints  = new ArrayList<SQLCommentHint>();
 
-    private SQLExprTableSource     like;
+
     
     private SQLName                tableGroup;
 
@@ -55,20 +56,7 @@ public class MySqlCreateTableStatement extends SQLCreateTableStatement implement
         super (JdbcConstants.MYSQL);
     }
 
-    public SQLExprTableSource getLike() {
-        return like;
-    }
 
-    public void setLike(SQLName like) {
-        this.setLike(new SQLExprTableSource(like));
-    }
-
-    public void setLike(SQLExprTableSource like) {
-        if (like != null) {
-            like.setParent(this);
-        }
-        this.like = like;
-    }
 
     public List<SQLCommentHint> getHints() {
         return hints;
@@ -134,6 +122,9 @@ public class MySqlCreateTableStatement extends SQLCreateTableStatement implement
         }
 
         public void setName(SQLName name) {
+            if (name != null) {
+                name.setParent(this);
+            }
             this.name = name;
         }
 
@@ -142,6 +133,9 @@ public class MySqlCreateTableStatement extends SQLCreateTableStatement implement
         }
 
         public void setStorage(SQLExpr storage) {
+            if (storage != null) {
+                storage.setParent(this);
+            }
             this.storage = storage;
         }
 
@@ -152,6 +146,20 @@ public class MySqlCreateTableStatement extends SQLCreateTableStatement implement
                 acceptChild(visitor, getStorage());
             }
             visitor.endVisit(this);
+        }
+
+        public TableSpaceOption clone() {
+            TableSpaceOption x = new TableSpaceOption();
+
+            if (name != null) {
+                x.setName(name.clone());
+            }
+
+            if (storage != null) {
+                x.setStorage(storage.clone());
+            }
+
+            return x;
         }
 
     }
@@ -214,15 +222,16 @@ public class MySqlCreateTableStatement extends SQLCreateTableStatement implement
     }
 
     public boolean apply(SQLAlterTableAddIndex item) {
-        if (item.isKey()) {
-            MySqlPrimaryKey x = new MySqlPrimaryKey();
+        if (item.isUnique()) {
+            MySqlUnique x = new MySqlUnique();
             item.cloneTo(x);
             x.setParent(this);
             this.tableElementList.add(x);
             return true;
         }
-        if (item.isUnique()) {
-            MySqlUnique x = new MySqlUnique();
+
+        if (item.isKey()) {
+            MySqlKey x = new MySqlKey();
             item.cloneTo(x);
             x.setParent(this);
             this.tableElementList.add(x);
@@ -295,13 +304,14 @@ public class MySqlCreateTableStatement extends SQLCreateTableStatement implement
             insertIndex = beforeIndex;
         } else if (afterIndex != -1) {
             insertIndex = afterIndex + 1;
+        } else if (item.isFirst()) {
+            insertIndex = 0;
         }
 
         SQLColumnDefinition column = item.getNewColumnDefinition().clone();
         column.setParent(this);
         if (insertIndex == -1 || insertIndex == columnIndex) {
             tableElementList.set(columnIndex, column);
-            return true;
         } else {
             if (insertIndex > columnIndex) {
                 tableElementList.add(insertIndex, column);
@@ -309,6 +319,16 @@ public class MySqlCreateTableStatement extends SQLCreateTableStatement implement
             } else {
                 tableElementList.remove(columnIndex);
                 tableElementList.add(insertIndex, column);
+            }
+        }
+
+        for (int i = 0; i < tableElementList.size(); i++) {
+            SQLTableElement e = tableElementList.get(i);
+            if(e instanceof MySqlTableIndex) {
+                ((MySqlTableIndex) e).applyColumnRename(columnName, column.getName());
+            } else if (e instanceof SQLUnique) {
+                SQLUnique unique = (SQLUnique) e;
+                unique.applyColumnRename(columnName, column.getName());
             }
         }
 

@@ -21,11 +21,7 @@ import static com.alibaba.druid.sql.parser.LayoutCharacters.EOI;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.alibaba.druid.sql.parser.Keywords;
-import com.alibaba.druid.sql.parser.Lexer;
-import com.alibaba.druid.sql.parser.NotAllowCommentException;
-import com.alibaba.druid.sql.parser.ParserException;
-import com.alibaba.druid.sql.parser.Token;
+import com.alibaba.druid.sql.parser.*;
 
 public class OracleLexer extends Lexer {
 
@@ -114,6 +110,8 @@ public class OracleLexer extends Lexer {
         map.put("FETCH", Token.FETCH);
         map.put("TABLESPACE", Token.TABLESPACE);
         map.put("PARTITION", Token.PARTITION);
+        map.put("TRUE", Token.TRUE);
+        map.put("FALSE", Token.FALSE);
 
         map.put("，", Token.COMMA);
         map.put("（", Token.LPAREN);
@@ -134,13 +132,18 @@ public class OracleLexer extends Lexer {
         super.keywods = DEFAULT_ORACLE_KEYWORDS;
     }
 
-    public void scanVariable() {
-        if (ch == '@') {
-            scanChar();
-            token = Token.MONKEYS_AT;
-            return;
-        }
+    public OracleLexer(String input, SQLParserFeature... features){
+        super(input);
+        this.skipComment = true;
+        this.keepComments = true;
+        super.keywods = DEFAULT_ORACLE_KEYWORDS;
 
+        for (SQLParserFeature feature : features) {
+            config(feature, true);
+        }
+    }
+
+    public void scanVariable() {
         if (ch != ':' && ch != '#' && ch != '$') {
             throw new ParserException("illegal variable. " + info());
         }
@@ -195,6 +198,12 @@ public class OracleLexer extends Lexer {
         } else {
             token = Token.VARIANT;
         }
+    }
+
+    protected void scanVariable_at() {
+        scanChar();
+        token = Token.MONKEYS_AT;
+        return;
     }
 
     public void scanComment() {

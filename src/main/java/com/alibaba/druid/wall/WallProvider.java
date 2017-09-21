@@ -504,7 +504,9 @@ public abstract class WallProvider {
         try {
             WallContext.create(dbType);
             WallCheckResult result = checkInternal(sql);
-            return result.getViolations().isEmpty();
+            return result
+                    .getViolations()
+                    .isEmpty();
         } finally {
 
             if (originalContext == null) {
@@ -703,6 +705,8 @@ public abstract class WallProvider {
             resultSql = sql;
         }
         result.setSql(resultSql);
+
+        result.setUpdateCheckItems(visitor.getUpdateCheckItems());
 
         return result;
     }

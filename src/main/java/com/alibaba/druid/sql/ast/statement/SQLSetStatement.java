@@ -28,6 +28,7 @@ import com.alibaba.druid.sql.ast.expr.SQLIntegerExpr;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
 
 public class SQLSetStatement extends SQLStatementImpl {
+    private Option option;
 
     private List<SQLAssignItem> items = new ArrayList<SQLAssignItem>();
     
@@ -46,7 +47,9 @@ public class SQLSetStatement extends SQLStatementImpl {
 
     public SQLSetStatement(SQLExpr target, SQLExpr value, String dbType){
         super (dbType);
-        this.items.add(new SQLAssignItem(target, value));
+        SQLAssignItem item = new SQLAssignItem(target, value);
+        item.setParent(this);
+        this.items.add(item);
     }
 
     public static SQLSetStatement plus(SQLName target) {
@@ -68,6 +71,20 @@ public class SQLSetStatement extends SQLStatementImpl {
 
     public void setHints(List<SQLCommentHint> hints) {
         this.hints = hints;
+    }
+
+    public Option getOption() {
+        return option;
+    }
+
+    public void setOption(Option option) {
+        this.option = option;
+    }
+
+    public void set(SQLExpr target, SQLExpr value) {
+        SQLAssignItem assignItem = new SQLAssignItem(target, value);
+        assignItem.setParent(this);
+        this.items.add(assignItem);
     }
 
     @Override
@@ -107,5 +124,13 @@ public class SQLSetStatement extends SQLStatementImpl {
             }
         }
         return x;
+    }
+
+    public static enum Option {
+        IDENTITY_INSERT,
+        PASSWORD, // mysql
+        GLOBAL,
+        SESSION,
+        LOCAL
     }
 }

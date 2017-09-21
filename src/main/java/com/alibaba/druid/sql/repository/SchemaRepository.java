@@ -18,40 +18,32 @@ package com.alibaba.druid.sql.repository;
 import com.alibaba.druid.DruidRuntimeException;
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.*;
-import com.alibaba.druid.sql.ast.expr.SQLAggregateExpr;
 import com.alibaba.druid.sql.ast.expr.SQLAllColumnExpr;
 import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
 import com.alibaba.druid.sql.ast.expr.SQLPropertyExpr;
 import com.alibaba.druid.sql.ast.statement.*;
-import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlCreateTableStatement;
-import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlSelectQueryBlock;
-import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlShowColumnsStatement;
-import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlShowCreateTableStatement;
-import com.alibaba.druid.sql.dialect.mysql.visitor.MySqlASTVisitor;
+import com.alibaba.druid.sql.dialect.mysql.ast.statement.*;
 import com.alibaba.druid.sql.dialect.mysql.visitor.MySqlASTVisitorAdapter;
-import com.alibaba.druid.sql.dialect.odps.ast.OdpsSelectQueryBlock;
-import com.alibaba.druid.sql.dialect.odps.visitor.OdpsASTVisitorAdapter;
 import com.alibaba.druid.sql.dialect.oracle.ast.stmt.OracleCreateTableStatement;
-import com.alibaba.druid.sql.dialect.oracle.ast.stmt.OracleSelectQueryBlock;
-import com.alibaba.druid.sql.dialect.oracle.ast.stmt.OracleSelectTableReference;
 import com.alibaba.druid.sql.dialect.oracle.visitor.OracleASTVisitorAdapter;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
 import com.alibaba.druid.sql.visitor.SQLASTVisitorAdapter;
+import com.alibaba.druid.support.logging.Log;
+import com.alibaba.druid.support.logging.LogFactory;
 import com.alibaba.druid.util.JdbcConstants;
-import com.alibaba.druid.util.JdbcUtils;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListMap;
 
 /**
  * Created by wenshao on 03/06/2017.
  */
 public class SchemaRepository {
+    private static Log LOG = LogFactory.getLog(SchemaRepository.class);
     private Schema defaultSchema;
     protected String dbType;
     protected SQLASTVisitor consoleVisitor;
-    protected SQLASTVisitor resolveVisitor;
+
 
     public SchemaRepository() {
 
@@ -62,16 +54,18 @@ public class SchemaRepository {
 
         if (JdbcConstants.MYSQL.equals(dbType)) {
             consoleVisitor = new MySqlConsoleSchemaVisitor();
-            resolveVisitor = new MySqlResolveVisitor();
         } else if (JdbcConstants.ORACLE.equals(dbType)) {
             consoleVisitor = new OracleConsoleSchemaVisitor();
-            resolveVisitor = new OracleResolveVisitor();
         } else {
             consoleVisitor = new DefaultConsoleSchemaVisitor();
         }
     }
 
     private Map<String, Schema> schemas = new LinkedHashMap<String, Schema>();
+
+    public String getDbType() {
+        return dbType;
+    }
 
     public String getDefaultSchemaName() {
         return getDefaultSchema().getName();
@@ -231,7 +225,7 @@ public class SchemaRepository {
         return getDefaultSchema().getTableCount();
     }
 
-    public Map<String, SchemaObject> getObjects() {
+    public Collection<SchemaObject> getObjects() {
         return getDefaultSchema().getObjects();
     }
 
@@ -239,11 +233,57 @@ public class SchemaRepository {
         return getDefaultSchema().getViewCount();
     }
 
+    public void resolve(SQLSelectStatement stmt, SchemaResolveVisitor.Option... options) {
+        if (stmt == null) {
+            return;
+        }
+
+        SchemaResolveVisitor resolveVisitor = createResolveVisitor(options);
+        resolveVisitor.visit(stmt);
+    }
+
+    public void resolve(SQLStatement stmt, SchemaResolveVisitor.Option... options) {
+        if (stmt == null) {
+            return;
+        }
+
+        SchemaResolveVisitor resolveVisitor = createResolveVisitor(options);
+        stmt.accept(resolveVisitor);
+    }
+
+    private SchemaResolveVisitor createResolveVisitor(SchemaResolveVisitor.Option... options) {
+        int optionsValue = SchemaResolveVisitor.Option.of(options);
+
+        SchemaResolveVisitor resolveVisitor;
+        if (JdbcConstants.MYSQL.equals(dbType)
+                || JdbcConstants.SQLITE.equals(dbType)) {
+            resolveVisitor = new SchemaResolveVisitorFactory.MySqlResolveVisitor(this, optionsValue);
+        } else if (JdbcConstants.ORACLE.equals(dbType)) {
+            resolveVisitor = new SchemaResolveVisitorFactory.OracleResolveVisitor(this, optionsValue);
+        } else if (JdbcConstants.DB2.equals(dbType)) {
+            resolveVisitor = new SchemaResolveVisitorFactory.DB2ResolveVisitor(this, optionsValue);
+        } else if (JdbcConstants.ODPS.equals(dbType)) {
+            resolveVisitor = new SchemaResolveVisitorFactory.OdpsResolveVisitor(this, optionsValue);
+        } else if (JdbcConstants.POSTGRESQL.equals(dbType)) {
+            resolveVisitor = new SchemaResolveVisitorFactory.PGResolveVisitor(this, optionsValue);
+        } else if (JdbcConstants.SQL_SERVER.equals(dbType)) {
+            resolveVisitor = new SchemaResolveVisitorFactory.SQLServerResolveVisitor(this, optionsValue);
+        } else {
+            resolveVisitor = new SchemaResolveVisitorFactory.SQLResolveVisitor(this, optionsValue);
+        }
+        return resolveVisitor;
+    }
+
     public String resolve(String input) {
+        SchemaResolveVisitor visitor
+                = createResolveVisitor(
+                    SchemaResolveVisitor.Option.ResolveAllColumn,
+                    SchemaResolveVisitor.Option.ResolveIdentifierAlias);
+
         List<SQLStatement> stmtList = SQLUtils.parseStatements(input, dbType);
 
         for (SQLStatement stmt : stmtList) {
-            stmt.accept(resolveVisitor);
+            stmt.accept(visitor);
         }
 
         return SQLUtils.toSQLString(stmtList, dbType);
@@ -258,16 +298,42 @@ public class SchemaRepository {
             for (SQLStatement stmt : stmtList) {
                 if (stmt instanceof MySqlShowColumnsStatement) {
                     MySqlShowColumnsStatement showColumns = ((MySqlShowColumnsStatement) stmt);
-                    SQLName table = showColumns.getTable();
-                    SchemaObject schemaObject = findTable(table);
-                    MySqlCreateTableStatement createTableStmt = (MySqlCreateTableStatement) schemaObject.getStatement();
-                    createTableStmt.showCoumns(buf);
+                    SQLName db = showColumns.getDatabase();
+                    Schema schema;
+                    if (db == null) {
+                        schema = getDefaultSchema();
+                    } else {
+                        schema = findSchema(db.getSimpleName());
+                    }
+
+                    SQLName table = null;
+                    SchemaObject schemaObject = null;
+                    if (schema != null) {
+                        table = showColumns.getTable();
+                        schemaObject = schema.findTable(table.nameHashCode64());
+                    }
+
+                    if (schemaObject == null) {
+                        buf.append("ERROR 1146 (42S02): Table '" + table + "' doesn't exist\n");
+                    } else {
+                        MySqlCreateTableStatement createTableStmt = (MySqlCreateTableStatement) schemaObject.getStatement();
+                        createTableStmt.showCoumns(buf);
+                    }
                 } else if (stmt instanceof MySqlShowCreateTableStatement) {
                     MySqlShowCreateTableStatement showCreateTableStmt = (MySqlShowCreateTableStatement) stmt;
                     SQLName table = showCreateTableStmt.getName();
                     SchemaObject schemaObject = findTable(table);
-                    MySqlCreateTableStatement createTableStmt = (MySqlCreateTableStatement) schemaObject.getStatement();
-                    createTableStmt.output(buf);
+                    if (schemaObject == null) {
+                        buf.append("ERROR 1146 (42S02): Table '" + table + "' doesn't exist\n");
+                    } else {
+                        MySqlCreateTableStatement createTableStmt = (MySqlCreateTableStatement) schemaObject.getStatement();
+                        createTableStmt.output(buf);
+                    }
+                } else if (stmt instanceof MySqlRenameTableStatement) {
+                    MySqlRenameTableStatement renameStmt = (MySqlRenameTableStatement) stmt;
+                    for (MySqlRenameTableStatement.Item item : renameStmt.getItems()) {
+                        renameTable(item.getName(), item.getTo());
+                    }
                 } else if (stmt instanceof SQLShowTablesStatement) {
                     SQLShowTablesStatement showTables = (SQLShowTablesStatement) stmt;
                     SQLName database = showTables.getDatabase();
@@ -284,7 +350,6 @@ public class SchemaRepository {
                             buf.append('\n');
                         }
                     }
-
                 } else {
                     stmt.accept(consoleVisitor);
                 }
@@ -308,180 +373,46 @@ public class SchemaRepository {
         if (name instanceof SQLPropertyExpr) {
             SQLPropertyExpr propertyExpr = (SQLPropertyExpr) name;
             String schema = propertyExpr.getOwnernName();
-            String table = propertyExpr.getName();
+            long tableHashCode64 = propertyExpr.nameHashCode64();
 
             Schema schemaObj = findSchema(schema);
             if (schemaObj == null) {
                 return null;
             }
 
-            return schemaObj.findTable(table);
+            return schemaObj.findTable(tableHashCode64);
         }
 
         return null;
     }
 
-    public class MySqlResolveVisitor extends MySqlASTVisitorAdapter {
+    private boolean renameTable(SQLName name, SQLName to) {
+        Schema schema;
+        if (name instanceof SQLPropertyExpr) {
+            String schemaName = ((SQLPropertyExpr) name).getOwnernName();
+            schema = findSchema(schemaName);
+        } else {
+            schema = getDefaultSchema();
+        }
 
-        public boolean visit(SQLExprTableSource x) {
-            resolve(this, x);
+        if (schema == null) {
             return false;
         }
 
-        public boolean visit(MySqlSelectQueryBlock x) {
-            x.getFrom().accept(this);
-
-            resolve(this, x);
-            return super.visit(x);
-        }
-    }
-
-    public class OracleResolveVisitor extends OracleASTVisitorAdapter {
-        public boolean visit(OracleSelectTableReference x) {
-            resolve(this, x);
-            return false;
-        }
-
-        public boolean visit(SQLExprTableSource x) {
-            resolve(this, x);
-            return false;
-        }
-
-        public boolean visit(OracleSelectQueryBlock x) {
-            x.getFrom().accept(this);
-
-            resolve(this, x);
-            return super.visit(x);
-        }
-
-        public boolean visit(SQLIdentifierExpr x) {
-            resolve(this, x);
-            return true;
-        }
-    }
-
-    public class OdpsResolveVisitor extends OdpsASTVisitorAdapter {
-
-        public boolean visit(SQLExprTableSource x) {
-            resolve(this, x);
-            return false;
-        }
-
-        public boolean visit(OdpsSelectQueryBlock x) {
-            resolve(this, x);
-            return super.visit(x);
-        }
-    }
-
-    private void resolve(SQLASTVisitor visitor, SQLIdentifierExpr x) {
-        SQLSelectQueryBlock queryBlock = null;
-        for (SQLObject parent = x.getParent(); parent != null; parent = parent.getParent()) {
-            if (parent instanceof SQLTableSource) {
-                return;
-            }
-            if (parent instanceof SQLSelectQueryBlock) {
-                queryBlock = (SQLSelectQueryBlock) parent;
-                break;
-            }
-        }
-
-        if (queryBlock == null) {
-            return;
-        }
-
-        String ident = x.getName();
-        SQLTableSource tableSource = queryBlock.findTableSourceWithColumn(ident);
-        if (tableSource != null) {
-            String alias = tableSource.computeAlias();
-            SQLPropertyExpr propertyExpr = new SQLPropertyExpr(alias, ident);
-            SQLUtils.replaceInParent(x, propertyExpr);
-        }
-    }
-
-    private void resolve(SQLASTVisitor visitor, SQLExprTableSource x) {
-        if (x.getSchemaObject() != null) {
-            return;
-        }
-
-        SQLExpr expr = x.getExpr();
-        if (expr instanceof SQLName) {
-            SchemaObject table = findTable((SQLName) expr);
-            if (table != null) {
-                x.setSchemaObject(table);
-            }
-        }
-    }
-
-    private void resolve(SQLASTVisitor visitor, SQLSelectQueryBlock x) {
-        SQLTableSource from = x.getFrom();
-        from.accept(visitor);
-
-        List<SQLSelectItem> selectList = x.getSelectList();
-
-        List<SQLSelectItem> columns = new ArrayList<SQLSelectItem>();
-        for (int i = selectList.size() - 1; i >= 0; i--) {
-            SQLSelectItem selectItem = selectList.get(i);
-            SQLExpr expr = selectItem.getExpr();
-            if (expr instanceof SQLAllColumnExpr) {
-                extractColumns(from, columns);
-            } else if (expr instanceof SQLPropertyExpr) {
-                SQLPropertyExpr propertyExpr = (SQLPropertyExpr) expr;
-                String ownerName = propertyExpr.getOwnernName();
-                if (propertyExpr.getName().equals("*")) {
-                    SQLTableSource tableSource = x.findTableSource(ownerName);
-                    extractColumns(tableSource, columns);
-                }
-
-                SQLColumnDefinition column = propertyExpr.getResolvedColumn();
-                if (column != null) {
-                    continue;
-                }
-                SQLTableSource tableSource = x.findTableSource(propertyExpr.getOwnernName());
-                if (tableSource != null) {
-                    column = tableSource.findColumn(propertyExpr.getName());
-                    if (column != null) {
-                        propertyExpr.setResolvedColumn(column);
-                    }
-                }
-            } else if (expr instanceof SQLIdentifierExpr) {
-                SQLIdentifierExpr identExpr = (SQLIdentifierExpr) expr;
-                SQLColumnDefinition column = identExpr.getResolvedColumn();
-                if (column != null) {
-                    continue;
-                }
-                column = from.findColumn(identExpr.getName());
-                if (column != null) {
-                    identExpr.setResolvedColumn(column);
-                }
+        long nameHashCode64 = name.nameHashCode64();
+        SchemaObject schemaObject = schema.findTable(nameHashCode64);
+        if (schemaObject != null) {
+            MySqlCreateTableStatement createTableStmt = (MySqlCreateTableStatement) schemaObject.getStatement();
+            if (createTableStmt != null) {
+                createTableStmt.setName(to.clone());
             }
 
-            if (columns.size() > 0) {
-                for (SQLSelectItem column : columns) {
-                    column.setParent(x);
-                }
-
-                selectList.remove(i);
-                selectList.addAll(i, columns);
-            }
+            schema.objects.put(to.hashCode64(), schemaObject);
+            schema.objects.remove(nameHashCode64);
         }
+        return true;
     }
 
-    private void extractColumns(SQLTableSource from, List<SQLSelectItem> columns) {
-        if (from instanceof SQLExprTableSource) {
-            SchemaObject table = findTable((SQLExprTableSource) from);
-            if (table != null) {
-                SQLCreateTableStatement createTableStmt = (SQLCreateTableStatement) table.getStatement();
-                for (SQLTableElement e : createTableStmt.getTableElementList()) {
-                    if (e instanceof SQLColumnDefinition) {
-                        SQLColumnDefinition column = (SQLColumnDefinition) e;
-                        SQLIdentifierExpr name = (SQLIdentifierExpr) column.getName().clone();
-                        name.setResolvedColumn(column);
-                        columns.add(new SQLSelectItem(name));
-                    }
-                }
-            }
-        }
-    }
 
     public SchemaObject findTable(SQLExprTableSource x) {
         if (x == null) {
@@ -542,10 +473,14 @@ public class SchemaRepository {
             return false;
         }
 
-
         public boolean visit(SQLUseStatement x) {
             String schema = x.getDatabase().getSimpleName();
             setDefaultSchema(schema);
+            return false;
+        }
+
+        public boolean visit(SQLDropIndexStatement x) {
+            acceptDropIndex(x);
             return false;
         }
     }
@@ -601,6 +536,11 @@ public class SchemaRepository {
             setDefaultSchema(schema);
             return false;
         }
+
+        public boolean visit(SQLDropIndexStatement x) {
+            acceptDropIndex(x);
+            return false;
+        }
     }
 
     public class DefaultConsoleSchemaVisitor extends SQLASTVisitorAdapter {
@@ -643,6 +583,11 @@ public class SchemaRepository {
             acceptAlterTable(x);
             return false;
         }
+
+        public boolean visit(SQLDropIndexStatement x) {
+            acceptDropIndex(x);
+            return false;
+        }
     }
 
     boolean acceptCreateTable(MySqlCreateTableStatement x) {
@@ -662,41 +607,74 @@ public class SchemaRepository {
     }
 
     boolean acceptCreateTable(SQLCreateTableStatement x) {
-        String schemaName = x.getSchema();
+        SQLCreateTableStatement x1 = x.clone();
+        String schemaName = x1.getSchema();
 
         Schema schema = findSchema(schemaName, true);
 
-        SQLSelect select = x.getSelect();
+        SQLSelect select = x1.getSelect();
         if (select != null) {
-            select.accept(resolveVisitor);
+            select.accept(createResolveVisitor(SchemaResolveVisitor.Option.ResolveAllColumn));
 
             SQLSelectQueryBlock queryBlock = select.getFirstQueryBlock();
             if (queryBlock != null) {
                 List<SQLSelectItem> selectList = queryBlock.getSelectList();
                 for (SQLSelectItem selectItem : selectList) {
+                    SQLExpr selectItemExpr = selectItem.getExpr();
+                    if (selectItemExpr instanceof SQLAllColumnExpr
+                            || (selectItemExpr instanceof SQLPropertyExpr && ((SQLPropertyExpr) selectItemExpr).getName().equals("*"))) {
+                        continue;
+                    }
+
                     String name = selectItem.computeAlias();
                     SQLDataType dataType = selectItem.computeDataType();
                     SQLColumnDefinition column = new SQLColumnDefinition();
                     column.setName(name);
                     column.setDataType(dataType);
                     column.setDbType(dbType);
-                    x.getTableElementList().add(column);
+                    x1.getTableElementList().add(column);
                 }
-                x.setSelect(null);
+                if (x1.getTableElementList().size() > 0) {
+                    x1.setSelect(null);
+                }
             }
         }
 
-        x.setSchema(null);
+        SQLExprTableSource like = x1.getLike();
+        if (like != null) {
+            SchemaObject tableObject = null;
 
-        String name = x.computeName();
-        SchemaObject table = schema.findTableOrView(name);
-        if (table != null) {
-            return false;
+            SQLName name = like.getName();
+            if (name != null) {
+                tableObject = findTable(name);
+            }
+
+            SQLCreateTableStatement tableStmt = null;
+            if (tableObject != null) {
+                SQLStatement stmt = tableObject.getStatement();
+                if (stmt instanceof SQLCreateTableStatement) {
+                    tableStmt = (SQLCreateTableStatement) stmt;
+                }
+            }
+
+            if (tableStmt != null) {
+                SQLName tableName = x1.getName();
+                tableStmt.cloneTo(x1);
+                x1.setName(tableName);
+                x1.setLike((SQLExprTableSource) null);
+            }
         }
 
-        table = new SchemaObjectImpl(name, SchemaObjectType.Table, x.clone());
-        String name_lower = SQLUtils.normalize(name).toLowerCase();
-        schema.objects.put(name_lower, table);
+        x1.setSchema(null);
+
+        String name = x1.computeName();
+        SchemaObject table = schema.findTableOrView(name);
+        if (table != null) {
+            LOG.info("replaced table '" + name + "'");
+        }
+
+        table = new SchemaObjectImpl(name, SchemaObjectType.Table, x1);
+        schema.objects.put(table.nameHashCode64(), table);
         return true;
     }
 
@@ -707,14 +685,13 @@ public class SchemaRepository {
             if (schema == null) {
                 continue;
             }
-            String name = table.getName().getSimpleName();
-            String name_lower = SQLUtils.normalize(name).toLowerCase();
-            schema.objects.remove(name_lower);
+            long nameHashCode64 = table.getName().nameHashCode64();
+            schema.objects.remove(nameHashCode64);
         }
         return true;
     }
 
-    public boolean acceptView(SQLCreateViewStatement x) {
+    boolean acceptView(SQLCreateViewStatement x) {
         String schemaName = x.getSchema();
 
         Schema schema = findSchema(schemaName, true);
@@ -726,41 +703,53 @@ public class SchemaRepository {
         }
 
         SchemaObject object = new SchemaObjectImpl(name, SchemaObjectType.View, x.clone());
-        String name_lower = SQLUtils.normalize(name).toLowerCase();
-        schema.objects.put(name_lower, object);
+        schema.objects.put(object.nameHashCode64(), object);
         return true;
     }
 
-    public boolean acceptCreateIndex(SQLCreateIndexStatement x) {
+    boolean acceptDropIndex(SQLDropIndexStatement x) {
+        SQLName table = x.getTableName().getName();
+        SchemaObject object = findTable(table);
+
+        if (object != null) {
+            SQLCreateTableStatement stmt = (SQLCreateTableStatement) object.getStatement();
+            if (stmt != null) {
+                stmt.apply(x);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    boolean acceptCreateIndex(SQLCreateIndexStatement x) {
         String schemaName = x.getSchema();
 
         Schema schema = findSchema(schemaName, true);
 
         String name = x.getName().getSimpleName();
         SchemaObject object = new SchemaObjectImpl(name, SchemaObjectType.Index, x.clone());
-        String name_lower = SQLUtils.normalize(name).toLowerCase();
-        schema.objects.put(name_lower, object);
+        schema.objects.put(object.nameHashCode64(), object);
 
         return true;
     }
 
-    public boolean acceptCreateFunction(SQLCreateFunctionStatement x) {
+    boolean acceptCreateFunction(SQLCreateFunctionStatement x) {
         String schemaName = x.getSchema();
         Schema schema = findSchema(schemaName, true);
 
         String name = x.getName().getSimpleName();
         SchemaObject object = new SchemaObjectImpl(name, SchemaObjectType.Function, x.clone());
-        String name_lower = SQLUtils.normalize(name).toLowerCase();
-        schema.functions.put(name_lower, object);
+        schema.functions.put(object.nameHashCode64(), object);
 
         return true;
     }
 
-    public boolean acceptAlterTable(SQLAlterTableStatement x) {
+    boolean acceptAlterTable(SQLAlterTableStatement x) {
         String schemaName = x.getSchema();
         Schema schema = findSchema(schemaName, true);
 
-        SchemaObject object = schema.findTable(x.getTableName());
+        SchemaObject object = schema.findTable(x.nameHashCode64());
         if (object != null) {
             SQLCreateTableStatement stmt = (SQLCreateTableStatement) object.getStatement();
             if (stmt != null) {
@@ -778,8 +767,7 @@ public class SchemaRepository {
 
         String name = x.getName().getSimpleName();
         SchemaObject object = new SchemaObjectImpl(name, SchemaObjectType.Sequence);
-        String name_lower = SQLUtils.normalize(name).toLowerCase();
-        schema.objects.put(name_lower, object);
+        schema.objects.put(object.nameHashCode64(), object);
         return false;
     }
 
@@ -787,9 +775,8 @@ public class SchemaRepository {
         String schemaName = x.getSchema();
         Schema schema = findSchema(schemaName, true);
 
-        String name = x.getName().getSimpleName();
-        String name_lower = SQLUtils.normalize(name).toLowerCase();
-        schema.objects.remove(name_lower);
+        long nameHashCode64 = x.getName().nameHashCode64();
+        schema.objects.remove(nameHashCode64);
         return false;
     }
 }

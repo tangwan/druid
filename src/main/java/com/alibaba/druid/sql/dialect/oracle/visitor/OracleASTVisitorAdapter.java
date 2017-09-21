@@ -17,6 +17,7 @@ package com.alibaba.druid.sql.dialect.oracle.visitor;
 
 import com.alibaba.druid.sql.ast.statement.SQLMergeStatement.MergeInsertClause;
 import com.alibaba.druid.sql.ast.statement.SQLMergeStatement.MergeUpdateClause;
+import com.alibaba.druid.sql.ast.statement.SQLScriptCommitStatement;
 import com.alibaba.druid.sql.dialect.oracle.ast.OracleDataTypeIntervalDay;
 import com.alibaba.druid.sql.dialect.oracle.ast.OracleDataTypeIntervalYear;
 import com.alibaba.druid.sql.dialect.oracle.ast.clause.CycleClause;
@@ -49,7 +50,7 @@ import com.alibaba.druid.sql.visitor.SQLASTVisitorAdapter;
 public class OracleASTVisitorAdapter extends SQLASTVisitorAdapter implements OracleASTVisitor {
 
     @Override
-    public void endVisit(OraclePLSQLCommitStatement astNode) {
+    public void endVisit(SQLScriptCommitStatement astNode) {
 
     }
 
@@ -124,7 +125,7 @@ public class OracleASTVisitorAdapter extends SQLASTVisitorAdapter implements Ora
     }
 
     @Override
-    public boolean visit(OraclePLSQLCommitStatement astNode) {
+    public boolean visit(SQLScriptCommitStatement astNode) {
 
         return true;
     }
@@ -1050,6 +1051,16 @@ public class OracleASTVisitorAdapter extends SQLASTVisitorAdapter implements Ora
 
     @Override
     public void endVisit(OracleTreatExpr x) {
+
+    }
+
+    @Override
+    public boolean visit(OracleCreateSynonymStatement x) {
+        return true;
+    }
+
+    @Override
+    public void endVisit(OracleCreateSynonymStatement x) {
 
     }
 }
