@@ -39,13 +39,19 @@ public class SQLCreateTableStatement extends SQLStatementImpl implements SQLDDLS
     protected List<SQLTableElement> tableElementList = new ArrayList<SQLTableElement>();
 
     // for postgresql
-    private SQLExprTableSource      inherits;
+    protected SQLExprTableSource    inherits;
 
     protected SQLSelect             select;
 
     protected SQLExpr               comment;
 
-    protected SQLExprTableSource     like;
+    protected SQLExprTableSource    like;
+
+    protected Boolean               compress;
+    protected Boolean               logging;
+
+    protected SQLName               tablespace;
+    protected SQLPartitionBy        partitioning;
 
     public SQLCreateTableStatement(){
 
@@ -174,6 +180,45 @@ public class SQLCreateTableStatement extends SQLStatementImpl implements SQLDDLS
         this.like = like;
     }
 
+    public Boolean getCompress() {
+        return compress;
+    }
+
+    public void setCompress(Boolean compress) {
+        this.compress = compress;
+    }
+
+    public Boolean getLogging() {
+        return logging;
+    }
+
+    public void setLogging(Boolean logging) {
+        this.logging = logging;
+    }
+
+    public SQLName getTablespace() {
+        return tablespace;
+    }
+
+    public void setTablespace(SQLName tablespace) {
+        if (tablespace != null) {
+            tablespace.setParent(this);
+        }
+        this.tablespace = tablespace;
+    }
+
+    public SQLPartitionBy getPartitioning() {
+        return partitioning;
+    }
+
+    public void setPartitioning(SQLPartitionBy partitioning) {
+        if (partitioning != null) {
+            partitioning.setParent(this);
+        }
+
+        this.partitioning = partitioning;
+    }
+
     @Override
     protected void accept0(SQLASTVisitor visitor) {
         if (visitor.visit(this)) {
@@ -184,7 +229,21 @@ public class SQLCreateTableStatement extends SQLStatementImpl implements SQLDDLS
         }
         visitor.endVisit(this);
     }
-    
+
+    @Override
+    public List<SQLObject> getChildren() {
+        List<SQLObject> children = new ArrayList<SQLObject>();
+        children.add(tableSource);
+        children.addAll(tableElementList);
+        if (inherits != null) {
+            children.add(inherits);
+        }
+        if (select != null) {
+            children.add(select);
+        }
+        return children;
+    }
+
     @SuppressWarnings("unchecked")
     public void addBodyBeforeComment(List<String> comments) {
         if (attributes == null) {
@@ -928,4 +987,5 @@ public class SQLCreateTableStatement extends SQLStatementImpl implements SQLDDLS
     public String toString() {
         return SQLUtils.toSQLString(this, dbType);
     }
+
 }

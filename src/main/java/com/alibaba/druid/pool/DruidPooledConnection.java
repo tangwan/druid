@@ -63,19 +63,17 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
     protected volatile DruidConnectionHolder holder;
     protected TransactionInfo                transactionInfo;
     private final boolean                    dupCloseLogEnable;
-    private volatile boolean                 traceEnable          = false;
+    protected volatile boolean               traceEnable          = false;
     private boolean                          disable              = false;
     private boolean                          closed               = false;
-    private final Thread                     ownerThread;
+    protected final Thread                   ownerThread;
     private long                             connectedTimeMillis;
     private long                             connectedTimeNano;
     private volatile boolean                 running              = false;
-
     private volatile boolean                 abandoned            = false;
 
-    private StackTraceElement[]              connectStackTrace;
-
-    private Throwable                        disableError         = null;
+    protected StackTraceElement[]            connectStackTrace;
+    protected Throwable                      disableError         = null;
 
     public  ReentrantLock                    lock                 = new ReentrantLock();
 
@@ -167,14 +165,15 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
             }
         }
 
-        stmt.getPreparedStatementHolder().decrementInUseCount();
+        PreparedStatementHolder stmtHolder = stmt.getPreparedStatementHolder();
+        stmtHolder.decrementInUseCount();
         if (stmt.isPooled() && holder.isPoolPreparedStatements() && stmt.exceptionCount == 0) {
-            holder.getStatementPool().put(stmt.getPreparedStatementHolder());
+            holder.getStatementPool().put(stmtHolder);
 
             stmt.clearResultSet();
             holder.removeTrace(stmt);
 
-            stmt.getPreparedStatementHolder().setFetchRowPeak(stmt.getFetchRowPeak());
+            stmtHolder.setFetchRowPeak(stmt.getFetchRowPeak());
 
             stmt.setClosed(true); // soft set close
         } else if (stmt.isPooled() && holder.isPoolPreparedStatements()) {
@@ -182,7 +181,8 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
             stmt.clearResultSet();
             holder.removeTrace(stmt);
 
-            holder.getStatementPool().remove(stmt.getPreparedStatementHolder());
+            holder.getStatementPool()
+                    .remove(stmtHolder);
         } else {
             try {
                 //Connection behind the statement may be in invalid state, which will throw a SQLException.
@@ -203,7 +203,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
 
     @Override
     public Connection getConnection() {
-        if (!holder.isUnderlyingAutoCommit()) {
+        if (!holder.underlyingAutoCommit) {
             createTransactionInfo();
         }
 
@@ -704,7 +704,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         boolean useLocalSessionState = holder.getDataSource().isUseLocalSessionState();
 
         if (useLocalSessionState) {
-            if (autoCommit == holder.isUnderlyingAutoCommit()) {
+            if (autoCommit == holder.underlyingAutoCommit) {
                 return;
             }
         }
@@ -869,7 +869,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
     public DatabaseMetaData getMetaData() throws SQLException {
         checkState();
 
-        if (!holder.isUnderlyingAutoCommit()) {
+        if (!holder.underlyingAutoCommit) {
             createTransactionInfo();
         }
 
@@ -997,7 +997,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
     public int getHoldability() throws SQLException {
         checkState();
 
-        if (!holder.isUnderlyingAutoCommit()) {
+        if (!holder.underlyingAutoCommit) {
             createTransactionInfo();
         }
 

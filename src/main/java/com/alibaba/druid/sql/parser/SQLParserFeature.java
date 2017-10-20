@@ -17,9 +17,11 @@ package com.alibaba.druid.sql.parser;
 
 public enum SQLParserFeature {
     KeepInsertValueClauseOriginalString,
+    UseInsertColumnsCache,
     EnableSQLBinaryOpExprGroup,
     OptimizedForParameterized,
-    KeepComments
+    KeepComments,
+    SkipComments
     ;
 
     private SQLParserFeature(){

@@ -21,6 +21,7 @@ binary
 bit_length
 blob
 both
+by
 call
 cardinality
 case
@@ -61,8 +62,10 @@ current_user
 datalink
 date
 default
+deferrable
 dense_rank
 deref
+desc
 describe
 deterministic
 disconnect
@@ -93,6 +96,7 @@ exec
 exp
 false
 fetch
+final
 first_value
 floor
 for
@@ -115,6 +119,7 @@ inner
 intersect
 intersection
 into
+instantiable
 is
 isnull
 join
@@ -126,6 +131,7 @@ leading
 left
 like
 like_regex
+limit
 ln
 localtime
 localtimestamp
@@ -137,7 +143,6 @@ merge
 min
 mod
 modifies
-module
 multiset
 natural
 nclob
@@ -149,6 +154,7 @@ ntile
 null
 occurrences_regex
 octet_length
+oid
 offset
 on
 only
@@ -156,6 +162,7 @@ open
 or
 order
 outer
+over
 overlaps
 parameter
 percent
@@ -163,6 +170,7 @@ percentile_cont
 percentile_disc
 percent_rank
 period
+placing
 portion
 position_regex
 power
@@ -182,6 +190,7 @@ regr_sxy
 regr_syy
 result
 return
+returning
 right
 row_number
 scope

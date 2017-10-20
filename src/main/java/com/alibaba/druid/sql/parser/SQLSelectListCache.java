@@ -21,18 +21,19 @@ import com.alibaba.druid.sql.ast.statement.SQLSelectQueryBlock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class SQLSelectListCache {
     private final String dbType;
-    private List<String> sqlCache = new ArrayList<String>();
-    private List<SQLSelectQueryBlock> queryBlockCache = new ArrayList<SQLSelectQueryBlock>();
-    private List<String> printSqlList = new ArrayList<String>();
+    private final List<String> sqlCache = new ArrayList<String>();
+    private final List<SQLSelectQueryBlock> queryBlockCache = new ArrayList<SQLSelectQueryBlock>();
+    private final List<String> printSqlList = new ArrayList<String>();
 
     public SQLSelectListCache(String dbType) {
         this.dbType = dbType;
     }
 
-    public void add(String select) {
+    public synchronized void add(String select) {
         if (select == null || select.length() == 0) {
             return;
         }
@@ -47,9 +48,9 @@ public class SQLSelectListCache {
         selectParser.accept(Token.FROM);
         selectParser.accept(Token.EOF);
 
-        sqlCache.add(select.substring(6));
         queryBlockCache.add(queryBlock);
         printSqlList.add(queryBlock.toString());
+        sqlCache.add(select.substring(6));
     }
 
     public boolean match(Lexer lexer, SQLSelectQueryBlock queryBlock) {

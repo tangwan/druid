@@ -20,10 +20,10 @@ import com.alibaba.druid.sql.ast.SQLDataTypeImpl;
 import com.alibaba.druid.sql.ast.SQLExpr;
 import com.alibaba.druid.sql.ast.expr.*;
 import com.alibaba.druid.sql.ast.statement.*;
+import com.alibaba.druid.sql.dialect.oracle.ast.clause.OracleWithSubqueryEntry;
 import com.alibaba.druid.sql.dialect.oracle.ast.expr.OracleSysdateExpr;
 import com.alibaba.druid.sql.dialect.oracle.ast.stmt.*;
 import com.alibaba.druid.util.FnvHash;
-import oracle.jdbc.rowset.OracleJoinable;
 
 import java.util.List;
 
@@ -553,6 +553,8 @@ public class SQLTransformUtils {
                 SQLExpr arg0 = argumentns.get(0);
                 if (arg0 instanceof SQLNumericLiteralExpr) {
                     len = ((SQLNumericLiteralExpr) arg0).getNumber().intValue();
+                } else if (arg0 instanceof SQLVariantRefExpr) {
+                    len = 2000;
                 } else {
                     throw new UnsupportedOperationException(SQLUtils.toOracleString(x));
                 }
@@ -588,6 +590,10 @@ public class SQLTransformUtils {
             dataType = new SQLDataTypeImpl(SQLDataType.Constants.TIMESTAMP, 0);
         } else if (nameHash == FnvHash.Constants.TIMESTAMP) {
             x.setName(SQLDataType.Constants.TIMESTAMP);
+            if (x.isWithLocalTimeZone()) {
+                x.setWithLocalTimeZone(false);
+                x.setWithTimeZone(null);
+            }
             dataType = x;
         } else if (nameHash == FnvHash.Constants.DATETIME) {
             int len = -1;
@@ -669,6 +675,60 @@ public class SQLTransformUtils {
             }
         }
 
+        if (nameHashCode64 == FnvHash.Constants.SYSTIMESTAMP) {
+            SQLMethodInvokeExpr xx = x.clone();
+            xx.setMethodName("CURRENT_TIMESTAMP");
+            xx.setParent(x.getParent());
+            return xx;
+        }
+
+        if (nameHashCode64 == FnvHash.Constants.USERENV) {
+            if (x.getParameters().size() == 1) {
+                SQLExpr param0 = x.getParameters().get(0);
+                if (param0 instanceof SQLCharExpr) {
+                    String text = ((SQLCharExpr) param0).getText();
+                    if ("SESSIONID".equalsIgnoreCase(text)) {
+                        SQLMethodInvokeExpr xx = new SQLMethodInvokeExpr();
+                        xx.setMethodName("get_session_id");
+                        xx.setParent(x.getParent());
+                        return xx;
+                    }
+                }
+            }
+        }
+
+        if (nameHashCode64 == FnvHash.Constants.USERENV) {
+            if (x.getParameters().size() == 1) {
+                SQLExpr param0 = x.getParameters().get(0);
+                if (param0 instanceof SQLCharExpr) {
+                    String text = ((SQLCharExpr) param0).getText();
+                    if ("SESSIONID".equalsIgnoreCase(text)) {
+                        SQLMethodInvokeExpr xx = new SQLMethodInvokeExpr();
+                        xx.setMethodName("get_session_id");
+                        xx.setParent(x.getParent());
+                        return xx;
+                    }
+                }
+            }
+        }
+
+        if (nameHashCode64 == FnvHash.Constants.NUMTODSINTERVAL) {
+            if (x.getParameters().size() == 2) {
+                SQLExpr param0 = x.getParameters().get(0);
+                SQLExpr param1 = x.getParameters().get(1);
+
+                if (param0 instanceof SQLIntegerExpr && param1 instanceof SQLCharExpr) {
+                    String text = ((SQLCharExpr) param1).getText();
+                    if ("DAY".equalsIgnoreCase(text)) {
+                        SQLIntervalExpr intervalExpr = new SQLIntervalExpr();
+                        intervalExpr.setValue(new SQLCharExpr(param0.toString() + " DAYS"));
+                        intervalExpr.setParent(x.getParent());
+                        return intervalExpr;
+                    }
+                }
+            }
+        }
+
         return x;
     }
 
@@ -701,6 +761,13 @@ public class SQLTransformUtils {
 
             y.setParent(x.getParent());
             return y;
+        }
+
+        if (x instanceof OracleWithSubqueryEntry) {
+            SQLWithSubqueryClause.Entry entry = new SQLWithSubqueryClause.Entry();
+            ((OracleWithSubqueryEntry) x).cloneTo(entry);
+            entry.setParent(x.getParent());
+            return entry;
         }
 
         return x;
