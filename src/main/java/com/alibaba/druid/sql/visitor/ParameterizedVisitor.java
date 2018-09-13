@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2017 Alibaba Group Holding Ltd.
+ * Copyright 1999-2018 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,4 +26,6 @@ public interface ParameterizedVisitor extends PrintableVisitor {
     String getDbType();
 
     void setOutputParameters(List<Object> parameters);
+
+    void config(VisitorFeature feature, boolean state);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2017 Alibaba Group Holding Ltd.
+ * Copyright 1999-2018 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -100,8 +100,11 @@ public class SQLMethodInvokeExpr extends SQLExprImpl implements SQLReplaceable, 
         return from;
     }
 
-    public void setFrom(SQLExpr from) {
-        this.from = from;
+    public void setFrom(SQLExpr x) {
+        if (x != null) {
+            x.setParent(this);
+        }
+        this.from = x;
     }
 
     public List<SQLExpr> getParameters() {
@@ -113,6 +116,13 @@ public class SQLMethodInvokeExpr extends SQLExprImpl implements SQLReplaceable, 
             param.setParent(this);
         }
         this.parameters.add(param);
+    }
+
+    public void addArgument(SQLExpr arg) {
+        if (arg != null) {
+            arg.setParent(this);
+        }
+        this.parameters.add(arg);
     }
 
     public void output(StringBuffer buf) {
@@ -138,6 +148,9 @@ public class SQLMethodInvokeExpr extends SQLExprImpl implements SQLReplaceable, 
         if (visitor.visit(this)) {
             acceptChild(visitor, this.owner);
             acceptChild(visitor, this.parameters);
+            acceptChild(visitor, this.from);
+            acceptChild(visitor, this.using);
+            acceptChild(visitor, this._for);
         }
 
         visitor.endVisit(this);
@@ -158,6 +171,9 @@ public class SQLMethodInvokeExpr extends SQLExprImpl implements SQLReplaceable, 
         if (visitor.visit(this)) {
             acceptChild(visitor, this.owner);
             acceptChild(visitor, this.parameters);
+            acceptChild(visitor, this.from);
+            acceptChild(visitor, this.using);
+            acceptChild(visitor, this._for);
         }
 
         visitor.endVisit(this);
@@ -215,6 +231,7 @@ public class SQLMethodInvokeExpr extends SQLExprImpl implements SQLReplaceable, 
         if (target == null) {
             return false;
         }
+
         for (int i = 0; i < parameters.size(); ++i) {
             if (parameters.get(i) == expr) {
                 parameters.set(i, target);
@@ -222,6 +239,22 @@ public class SQLMethodInvokeExpr extends SQLExprImpl implements SQLReplaceable, 
                 return true;
             }
         }
+
+        if (from == expr) {
+            setFrom(target);
+            return true;
+        }
+
+        if (using == expr) {
+            setUsing(target);
+            return true;
+        }
+
+        if (_for == expr) {
+            setFor(target);
+            return true;
+        }
+
         return false;
     }
 
@@ -278,11 +311,11 @@ public class SQLMethodInvokeExpr extends SQLExprImpl implements SQLReplaceable, 
         return using;
     }
 
-    public void setUsing(SQLExpr using) {
-        if (using != null) {
-            using.setParent(this);
+    public void setUsing(SQLExpr x) {
+        if (x != null) {
+            x.setParent(this);
         }
-        this.using = using;
+        this.using = x;
     }
 
     public SQLExpr getFor() {

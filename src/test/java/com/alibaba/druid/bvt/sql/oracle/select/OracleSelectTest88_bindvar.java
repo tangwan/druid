@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2017 Alibaba Group Holding Ltd.
+ * Copyright 1999-2018 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,7 +58,7 @@ public class OracleSelectTest88_bindvar extends OracleTest {
                     "FROM (\n" +
                     "\tSELECT *\n" +
                     "\tFROM \"rme\" \"rm\"\n" +
-                    "\tWHERE \"rm\".a - (:\"sys_b_07\") DAY(:\"sys_b_08\") TO SECOND(:\"sys_b_09\")\n" +
+                    "\tWHERE \"rm\".a - INTERVAL :\"sys_b_07\" DAY(:\"sys_b_08\") TO SECOND(:\"sys_b_09\")\n" +
                     ")", text);
         }
 

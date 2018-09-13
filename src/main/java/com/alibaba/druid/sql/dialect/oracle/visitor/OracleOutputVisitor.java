@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2017 Alibaba Group Holding Ltd.
+ * Copyright 1999-2018 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -116,6 +116,10 @@ public class OracleOutputVisitor extends SQLASTOutputVisitor implements OracleAS
             visit(windowing);
         }
 
+        if (x.isWindowingPreceding()) {
+            print0(ucase ? " PRECEDING" : " preceding");
+        }
+
         print(')');
         
         return false;
@@ -175,7 +179,8 @@ public class OracleOutputVisitor extends SQLASTOutputVisitor implements OracleAS
     }
 
     public boolean visit(OracleIntervalExpr x) {
-        if (x.getValue() instanceof SQLLiteralExpr) {
+        SQLExpr value = x.getValue();
+        if (value instanceof SQLLiteralExpr || value instanceof SQLVariantRefExpr) {
             print0(ucase ? "INTERVAL " : "interval ");
             x.getValue().accept(this);
             print(' ');
@@ -1742,6 +1747,7 @@ public class OracleOutputVisitor extends SQLASTOutputVisitor implements OracleAS
             for (SQLPartitionBy globalPartition : globalPartitions) {
                 println();
                 print0(ucase ? "GLOBAL " : "global ");
+                print0(ucase ? "PARTITION BY " : "partition by ");
                 globalPartition.accept(this);
             }
 
@@ -2092,9 +2098,11 @@ public class OracleOutputVisitor extends SQLASTOutputVisitor implements OracleAS
             print0(ucase ? "MONITORING" : "monitoring");
         }
 
-        if (x.getPartitioning() != null) {
+        SQLPartitionBy partitionBy = x.getPartitioning();
+        if (partitionBy != null) {
             println();
-            x.getPartitioning().accept(this);
+            print0(ucase ? "PARTITION BY " : "partition by ");
+            partitionBy.accept(this);
         }
 
         if (x.getCluster() != null) {
@@ -2517,6 +2525,17 @@ public class OracleOutputVisitor extends SQLASTOutputVisitor implements OracleAS
             print(')');
         }
 
+        String wrappedSource = x.getWrappedSource();
+        if (wrappedSource != null) {
+            print0(ucase ? " WRAPPED " : " wrapped ");
+            print0(wrappedSource);
+
+            if (x.isAfterSemi()) {
+                print(';');
+            }
+            return false;
+        }
+
         println();
         print(ucase ? "RETURN " : "return ");
         x.getReturnDataType().accept(this);
@@ -2578,11 +2597,6 @@ public class OracleOutputVisitor extends SQLASTOutputVisitor implements OracleAS
             block.accept(this);
         }
         return false;
-    }
-
-    @Override
-    public void endVisit(SQLCreateProcedureStatement x) {
-
     }
 
     @Override
@@ -2912,7 +2926,7 @@ public class OracleOutputVisitor extends SQLASTOutputVisitor implements OracleAS
             if (count != 0) {
                 print0(", ");
             }
-            print0(ucase ? "FOREIGHN KEY" : "foreighn key");
+            print0(ucase ? "FOREIGN KEY" : "foreign key");
             count++;
         }
 
@@ -3006,26 +3020,6 @@ public class OracleOutputVisitor extends SQLASTOutputVisitor implements OracleAS
     }
 
     public void endVisit(OracleCreateTableStatement.Organization x) {
-
-    }
-
-    public boolean visit(OracleCreateTableStatement.OracleExternalRecordFormat x) {
-        if (x.getDelimitedBy() != null) {
-            println();
-            print0(ucase ? "RECORDS DELIMITED BY " : "records delimited by ");
-            x.getDelimitedBy().accept(this);
-        }
-
-        if (x.getTerminatedBy() != null) {
-            println();
-            print0(ucase ? "FIELDS TERMINATED BY " : "fields terminated by ");
-            x.getTerminatedBy().accept(this);
-        }
-
-        return false;
-    }
-
-    public void endVisit(OracleCreateTableStatement.OracleExternalRecordFormat x) {
 
     }
 

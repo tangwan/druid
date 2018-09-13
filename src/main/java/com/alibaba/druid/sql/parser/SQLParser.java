@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2017 Alibaba Group Holding Ltd.
+ * Copyright 1999-2018 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 package com.alibaba.druid.sql.parser;
+
+import com.alibaba.druid.sql.ast.statement.SQLCreateTableStatement;
+import com.alibaba.druid.sql.dialect.hive.stmt.HiveCreateTableStatement;
 
 public class SQLParser {
     protected final Lexer lexer;
@@ -322,5 +325,9 @@ public class SQLParser {
 
     public final boolean isEnabled(SQLParserFeature feature) {
         return lexer.isEnabled(feature);
+    }
+
+    protected SQLCreateTableStatement newCreateStatement() {
+        return new SQLCreateTableStatement(getDbType());
     }
 }

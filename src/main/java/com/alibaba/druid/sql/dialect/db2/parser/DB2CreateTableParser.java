@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2017 Alibaba Group Holding Ltd.
+ * Copyright 1999-2018 Alibaba Group Holding Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,11 +75,7 @@ public class DB2CreateTableParser extends SQLCreateTableParser {
 
             for (; ; ) {
                 Token token = lexer.token();
-                if (token == Token.IDENTIFIER
-                        && lexer.stringVal().equalsIgnoreCase("SUPPLEMENTAL")
-                        && JdbcConstants.ORACLE.equals(dbType)) {
-                    this.parseCreateTableSupplementalLogingProps(createTable);
-                } else if (token == Token.IDENTIFIER //
+                if (token == Token.IDENTIFIER //
                         || token == Token.LITERAL_ALIAS) {
                     SQLColumnDefinition column = this.exprParser.parseColumn();
                     createTable.getTableElementList().add(column);
@@ -178,6 +174,12 @@ public class DB2CreateTableParser extends SQLCreateTableParser {
                 if (lexer.identifierEquals(FnvHash.Constants.YES)) {
                     lexer.nextToken();
                 }
+                continue;
+            } else if (lexer.token() == Token.INDEX) {
+                lexer.nextToken();
+                accept(Token.IN);
+                SQLName indexIn = this.exprParser.name();
+                createTable.setIndexIn(indexIn);
                 continue;
             }
             break;
